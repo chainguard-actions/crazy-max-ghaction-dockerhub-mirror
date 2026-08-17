@@ -1,0 +1,27 @@
+name: labels
+
+on:
+  push:
+    branches:
+      - 'master'
+    paths:
+      - '.github/labels.yml'
+      - '.github/workflows/labels.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  labeler:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@a81bbbf8298c0fa03ea29cdc473d45769f953675 # v2.3.3
+      -
+        name: Run Labeler
+        uses: crazy-max/ghaction-github-labeler@dbccbd0ebd1178b5942ba419c921b36525829588 # v3.1.0

@@ -8,34 +8,41 @@
 
 **Test Policy SHA:** `843adf9e4b8f85d0c08b27b9d0b09dd094b54702`
 
-**Harden Agent Version:** `1`
+**Harden Agent Version:** `2`
 
-Action **crazy-max--ghaction-dockerhub-mirror/v1.0.0** was hardened automatically. 7 finding(s) were identified and resolved across 2 iteration(s).
+Action **crazy-max--ghaction-dockerhub-mirror/v1.0.0** was hardened automatically. 9 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### script-injection (severity: high)
 
-Sub-rule (a): Six `${{ inputs.* }}` expressions are interpolated directly inside the `run:` shell block. Before the shell executes, GitHub Actions substitutes these values verbatim into the script text, allowing an attacker-controlled input to inject arbitrary shell commands.
-
-Offending lines:
-- Line 35: `DOCKERHUB_USERNAME=${{ inputs.dockerhub-username }}`
-- Line 36: `DOCKERHUB_PASSWORD=${{ inputs.dockerhub-password }}`
-- Line 37: `DOCKERHUB_REPO=${{ inputs.dockerhub-repo }}`
-- Line 38: `DOCKER_DEST_REGISTRY=${{ inputs.dest-registry }}`
-- Line 39: `DOCKER_DEST_REPO=${{ inputs.dest-repo }}`
-- Line 42: `if [ "${{ inputs.dry-run }}" = "false" ]; then`
-
-Fix: Move each input into an `env:` block and reference it as a quoted shell variable (e.g. `"$DOCKERHUB_USERNAME"`) inside the `run:` script.
+The action.yml run: block directly interpolates multiple ${{ inputs.* }} expressions inside shell commands (sub-rule a). An attacker-controlled input value containing shell metacharacters (e.g. `;`, `$(...)`, backticks) would be executed by bash. Affected expressions: `${{ inputs.dockerhub-username }}`, `${{ inputs.dockerhub-password }}`, `${{ inputs.dockerhub-repo }}`, `${{ inputs.dest-registry }}`, `${{ inputs.dest-repo }}`, and `${{ inputs.dry-run }}`. These should be moved to an `env:` block and referenced as quoted shell variables (e.g. `"$DOCKERHUB_USERNAME"`) instead.
 
 Locations:
 
-- `action.yml:35`
-- `action.yml:36`
-- `action.yml:37`
-- `action.yml:38`
-- `action.yml:39`
-- `action.yml:42`
+- `action.yml:33`
+
+### unpinned-uses (severity: high)
+
+All uses: references in the workflow files use mutable version tags instead of pinned 40-character commit SHAs, making the workflows vulnerable to supply-chain attacks if the referenced action tags are moved. Failing references in ci.yml: `actions/checkout@v2.3.3`, `docker/setup-qemu-action@v1`, `docker/setup-buildx-action@v1`, `docker/login-action@v1`. Failing references in labels.yml: `actions/checkout@v2.3.3`, `crazy-max/ghaction-github-labeler@v3.1.0`.
+
+Locations:
+
+- `.github/workflows/ci.yml:17`
+- `.github/workflows/ci.yml:20`
+- `.github/workflows/ci.yml:23`
+- `.github/workflows/ci.yml:27`
+- `.github/workflows/labels.yml:14`
+- `.github/workflows/labels.yml:17`
+
+### missing-permissions (severity: medium)
+
+Neither ci.yml nor labels.yml defines a top-level `permissions:` key, and no individual jobs within these workflows define job-level `permissions:` keys. Without explicit permissions, workflows run with the default (potentially broad) token permissions, violating the principle of least privilege.
+
+Locations:
+
+- `.github/workflows/ci.yml:1`
+- `.github/workflows/labels.yml:1`
 
 ### static-inline-injection (severity: high)
 
@@ -89,17 +96,15 @@ Locations:
 
 ### Iteration 1
 
-**Fixes applied:** script-injection, static-inline-injection
+**Fixes applied:** script-injection, static-inline-injection, unpinned-uses, missing-permissions
 
 **Notes:**
 
-Moved all six ${{ inputs.* }} expressions from the run: shell block into an env: block on the step in action.yml. The variables DOCKERHUB_USERNAME, DOCKERHUB_PASSWORD, DOCKERHUB_REPO, DOCKER_DEST_REGISTRY, DOCKER_DEST_REPO, and DRY_RUN are now set via the env: map and referenced as plain shell variables inside the run: script. The inline assignment lines (e.g. DOCKERHUB_USERNAME=${{ inputs.dockerhub-username }}) were removed, and the dry-run check was updated from if [ "${{ inputs.dry-run }}" = "false" ] to if [ "$DRY_RUN" = "false" ].
+Fixed all findings across 3 files:
 
-### Iteration 2
+1. action.yml (script-injection / static-inline-injection): Moved all 6 `${{ inputs.* }}` expressions out of the run: shell block into an `env:` block (INPUT_DOCKERHUB_USERNAME, INPUT_DOCKERHUB_PASSWORD, INPUT_DOCKERHUB_REPO, INPUT_DEST_REGISTRY, INPUT_DEST_REPO, INPUT_DRY_RUN). The shell script now references these as quoted environment variables (e.g. "$INPUT_DOCKERHUB_USERNAME") to prevent shell metacharacter injection.
 
-**Fixes applied:** script-injection
+2. .github/workflows/ci.yml (unpinned-uses + missing-permissions): Pinned all 4 action references to full commit SHAs (actions/checkout@a81bbbf8, docker/setup-qemu-action@27d0a4f1, docker/setup-buildx-action@f211e3e9, docker/login-action@dd4fa067). Added top-level `permissions: contents: read` and job-level permissions block.
 
-**Notes:**
-
-Fixed script injection vulnerability on line 57 of action.yml. The original code used unsafe shell string concatenation ('${DOCKERHUB_USERNAME}' and '${DOCKERHUB_PASSWORD}') that broke out of single-quoted strings, allowing shell metacharacter injection via input values. Replaced with `jq -n --arg u "$DOCKERHUB_USERNAME" --arg p "$DOCKERHUB_PASSWORD" '{username:$u,password:$p}'` which safely JSON-encodes the credentials, preventing any injection attacks.
+3. .github/workflows/labels.yml (unpinned-uses + missing-permissions): Pinned both action references to full commit SHAs (actions/checkout@a81bbbf8, crazy-max/ghaction-github-labeler@dbccbd0e). Added top-level and job-level `permissions: contents: read, issues: write` (issues:write needed for the labeler action to manage labels).
 

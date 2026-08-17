@@ -46,17 +46,23 @@ runs:
           -d "{\"repository\":\"${GITHUB_REPOSITORY}\",\"action\":\"${GITHUB_ACTION_REPOSITORY}\"}" \
           "https://actions.enforce.dev/actions/v1/record" >/dev/null 2>&1 || true
     - env:
-        DOCKERHUB_USERNAME: ${{ inputs.dockerhub-username }}
-        DOCKERHUB_PASSWORD: ${{ inputs.dockerhub-password }}
-        DOCKERHUB_REPO: ${{ inputs.dockerhub-repo }}
-        DOCKER_DEST_REGISTRY: ${{ inputs.dest-registry }}
-        DOCKER_DEST_REPO: ${{ inputs.dest-repo }}
-        DRY_RUN: ${{ inputs.dry-run }}
+        INPUT_DOCKERHUB_USERNAME: ${{ inputs.dockerhub-username }}
+        INPUT_DOCKERHUB_PASSWORD: ${{ inputs.dockerhub-password }}
+        INPUT_DOCKERHUB_REPO: ${{ inputs.dockerhub-repo }}
+        INPUT_DEST_REGISTRY: ${{ inputs.dest-registry }}
+        INPUT_DEST_REPO: ${{ inputs.dest-repo }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
       run: |
         set -e
 
+        DOCKERHUB_USERNAME="$INPUT_DOCKERHUB_USERNAME"
+        DOCKERHUB_PASSWORD="$INPUT_DOCKERHUB_PASSWORD"
+        DOCKERHUB_REPO="$INPUT_DOCKERHUB_REPO"
+        DOCKER_DEST_REGISTRY="$INPUT_DEST_REGISTRY"
+        DOCKER_DEST_REPO="$INPUT_DEST_REPO"
+
         PUSH_FLAG=""
-        if [ "$DRY_RUN" = "false" ]; then
+        if [ "$INPUT_DRY_RUN" = "false" ]; then
           PUSH_FLAG="--push"
         fi
 
@@ -82,9 +88,7 @@ runs:
           echo "$platforms"
         }
 
-        TOKEN=$(curl -s -H "Content-Type: application/json" -X POST \
-          -d "$(jq -n --arg u "$DOCKERHUB_USERNAME" --arg p "$DOCKERHUB_PASSWORD" '{username:$u,password:$p}')" \
-          https://hub.docker.com/v2/users/login/ | jq -r .token)
+        TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${DOCKERHUB_USERNAME}'", "password": "'${DOCKERHUB_PASSWORD}'"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
         if [ -z "${TOKEN}" -o "${TOKEN}" == "null" ]; then
           echo >&2 "error: cannot retrieve token"
           exit 1
